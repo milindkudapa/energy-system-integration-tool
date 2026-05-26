@@ -3,7 +3,7 @@
 function FrameworkLanding({ onBegin }) {
   return (
     <div className="landing">
-      <div className="kicker">Decision-making framework</div>
+      <div className="kicker">Decision-support framework</div>
       <h1>Energy System Integration for Resilience</h1>
       <p>
         A regional planner — composite of Municipality, PPC, IPTO, Greek state, foreign offtaker,
