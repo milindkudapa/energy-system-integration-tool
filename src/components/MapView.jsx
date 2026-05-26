@@ -7,9 +7,7 @@ const { useEffect: _useEffect_map, useRef: _useRef_map } = React;
 
 const MAP_STYLE = {
   version: 8,
-  // OpenStreetMap raster tiles — no key required for a research demo.
-  // Glyphs needed for settlement symbol labels.
-  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  // OpenStreetMap tiles — CORS-enabled, no key required, OK for a research demo.
   sources: {
     "osm-raster": {
       type: "raster",
@@ -121,7 +119,7 @@ function MapView({ state, outcomes, mode }) {
         layout: {
           "text-field": ["get", "name"], "text-size": 11,
           "text-offset": [0.8, 0], "text-anchor": "left",
-          "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+          "text-font": ["Noto Sans Regular"],
         },
         paint: { "text-color": "#18181B", "text-halo-color": "#FFFFFF", "text-halo-width": 1.2 },
       });
@@ -171,12 +169,18 @@ function MapView({ state, outcomes, mode }) {
         },
       });
 
-      // Export flow arrow
+      // Export flow arrows — one geojson source, two destination features (italy, bulgaria).
+      // Each feature carries `mag` (line width ↔ export TWh to that dest) and `dest` (id).
       map.addSource("export-flow", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: "export-flow-line", type: "line", source: "export-flow",
         paint: {
-          "line-color": "#0F766E",
+          "line-color": [
+            "match", ["get", "dest"],
+            "italy",    "#0F766E",
+            "bulgaria", "#9333EA",
+            "#0F766E",
+          ],
           "line-width": ["interpolate", ["linear"], ["get", "mag"], 0, 0, 1, 2, 5, 6],
           "line-opacity": 0.85,
           "line-dasharray": [1, 2],
@@ -257,18 +261,26 @@ function MapView({ state, outcomes, mode }) {
     });
     map.getSource("bess-placement").setData({ type: "FeatureCollection", features: bessFeatures });
 
-    // Export flow arrow magnitude scaled by exports
+    // Export flow arrows scaled by per-destination volume.
     if (mode === "export" && outcomes) {
-      const mag = Math.min(5, outcomes.annual.exp_twh * 3 + 0.2);
-      const grita = G.interconnections.features[0];
-      map.getSource("export-flow").setData({
-        type: "FeatureCollection",
-        features: [{
-          type: "Feature",
-          properties: { mag },
-          geometry: grita.geometry,
-        }],
+      const itTwh = outcomes.annual.exp_italy_twh || 0;
+      const bgTwh = outcomes.annual.exp_bulgaria_twh || 0;
+      const magIt = Math.min(5, itTwh * 3 + (itTwh > 0 ? 0.2 : 0));
+      const magBg = Math.min(5, bgTwh * 3 + (bgTwh > 0 ? 0.2 : 0));
+      const interIt = G.interconnections.features[0]; // GRITA → Italy
+      const interBg = G.interconnections.features[1]; // Greece ↔ Bulgaria
+      const features = [];
+      if (magIt > 0) features.push({
+        type: "Feature",
+        properties: { dest: "italy", mag: magIt, twh: itTwh },
+        geometry: interIt.geometry,
       });
+      if (magBg > 0) features.push({
+        type: "Feature",
+        properties: { dest: "bulgaria", mag: magBg, twh: bgTwh },
+        geometry: interBg.geometry,
+      });
+      map.getSource("export-flow").setData({ type: "FeatureCollection", features });
     } else {
       map.getSource("export-flow").setData({ type: "FeatureCollection", features: [] });
     }
@@ -279,7 +291,10 @@ function MapView({ state, outcomes, mode }) {
     if (!map) return;
     if (map.isStyleLoaded()) updatePlacements();
     else map.once("load", updatePlacements);
-  }, [state.pv_gw, state.bess_gwh, outcomes && outcomes.annual.exp_twh, mode]);
+  }, [state.pv_gw, state.bess_gwh,
+      outcomes && outcomes.annual.exp_italy_twh,
+      outcomes && outcomes.annual.exp_bulgaria_twh,
+      mode]);
 
   return (
     <div style={{ position: "relative", flex: 1 }}>
@@ -292,7 +307,12 @@ function MapView({ state, outcomes, mode }) {
         <div className="row"><span className="sw" style={{ background: "#8B5A2B" }} /> BESS at 400 kV subs</div>
         <div className="row"><span className="sw" style={{ background: "#B91C1C" }} /> Phase-out lignite</div>
         <div className="row"><span className="sw" style={{ background: "#71717A" }} /> Retired lignite</div>
-        {mode === "export" ? <div className="row"><span className="sw" style={{ background: "#0F766E" }} /> Export flow → Italy</div> : null}
+        {mode === "export" ? (
+          <React.Fragment>
+            <div className="row"><span className="sw" style={{ background: "#0F766E" }} /> Export flow → Italy</div>
+            <div className="row"><span className="sw" style={{ background: "#9333EA" }} /> Export flow → Bulgaria</div>
+          </React.Fragment>
+        ) : null}
       </div>
     </div>
   );

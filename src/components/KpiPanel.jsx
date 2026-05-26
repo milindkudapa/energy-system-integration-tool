@@ -145,6 +145,30 @@ function KpiPanel({ outcomes, baseline, section, ensemble }) {
           <div className="kpi-mini">
             <div className="lbl">Export revenue (PPC) <span className="v">{fmtEUR(o.economics.export_revenue_eur, 1)}/yr</span></div>
           </div>
+          <div className="kpi-mini">
+            <div className="lbl">
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 8, height: 8, background: "#0F766E", borderRadius: 2 }} />
+                Exports → Italy
+              </span>
+              <span className="v">{(o.annual.exp_italy_twh || 0).toFixed(2)} TWh</span>
+            </div>
+            <Bar value={o.annual.exp_italy_twh || 0}
+                 max={Math.max(0.5, (o.annual.exp_italy_twh || 0) + (o.annual.exp_bulgaria_twh || 0))}
+                 color="#0F766E" />
+          </div>
+          <div className="kpi-mini">
+            <div className="lbl">
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 8, height: 8, background: "#9333EA", borderRadius: 2 }} />
+                Exports → Bulgaria
+              </span>
+              <span className="v">{(o.annual.exp_bulgaria_twh || 0).toFixed(2)} TWh</span>
+            </div>
+            <Bar value={o.annual.exp_bulgaria_twh || 0}
+                 max={Math.max(0.5, (o.annual.exp_italy_twh || 0) + (o.annual.exp_bulgaria_twh || 0))}
+                 color="#9333EA" />
+          </div>
           {o.h2.kt_yr > 0 ? (
             <div className="kpi-mini">
               <div className="lbl">H₂ production <span className="v">{o.h2.kt_yr.toFixed(1)} kt/yr</span></div>

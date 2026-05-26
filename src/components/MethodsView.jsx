@@ -29,7 +29,7 @@ function MethodsView() {
       </MethodBlock>
 
       <MethodBlock title="Payoff functions — Export · Stackelberg"
-                   subtitle="State leads on export tax; followers play a closed-form Nash. For each tax value t the solver sweeps PPC's (PV × electrolyser) grid and picks the leader's argmax of u_state.">
+                   subtitle="State leads on export tax; followers play a closed-form Nash. For each tax value t the solver sweeps PPC's (PV × electrolyser) grid and picks the leader's argmax of u_state. Exports allocate hourly across Italy and Bulgaria in descending-price order (Italy first by long-run premium, Bulgaria second).">
         <FormulaTable rows={[
           ["State (leader)",
             "u_state = (export_tax_revenue / €B) + jobs / 80 000",
@@ -75,20 +75,21 @@ function MethodsView() {
         />
         <ModuleRow
           name="balance(gen, dem, stor, caps)"
-          formula="surplus[h] = gen[h] + stor[h] − dem[h];  exp[h] = min(surplus, exp_cap);  curt[h] = surplus − exp[h];  imp[h] = max(0, −surplus) capped at imp_cap"
+          formula="surplus[h] = gen[h] + stor[h] − dem[h];  exports allocate to {italy, bulgaria} in DESCENDING-price order — fill higher-price destination first up to its cap, then the next;  curt[h] = unallocated surplus;  imp[h] = max(0, −surplus) capped at imp_cap"
           notes={[
-            "exp_cap = GRITA 500 MW + IPTO reinforcement (2 MW per €1M, +500 MW cap), scaled by (1 − delay_yr/10).",
-            "imp_cap adds Bulgaria 600 MW + N. Macedonia 400 MW on top.",
+            "Italy cap = GRITA 500 MW; Bulgaria cap = 600 MW. Both scaled by (1 − delay_yr/10) and by IPTO reinforcement (split proportionally to nameplate).",
+            "imp_cap adds N. Macedonia 400 MW on top of the two export caps.",
             "Hours where demand exceeds (gen + stor + imp_cap) are silently dropped in the MVP — a LoLE metric is a Phase-3 follow-up.",
           ]}
         />
         <ModuleRow
           name="economics(state, gen, bal, profiles)"
-          formula="annual_cost = Σᵢ capex_i · CRF(r, n_i) · m_tech + Σᵢ capex_i · opex%_i + fuel_lignite + carbon · price_CO₂ + Σₕ imp[h] · price_GR[h] − Σₕ exp[h] · (price_IT[h] + GO_premium) · (1 − tax/100)"
+          formula="annual_cost = Σᵢ capex_i · CRF(r, n_i) · m_tech + Σᵢ capex_i · opex%_i + fuel_lignite + carbon · price_CO₂ + Σₕ imp[h] · price_GR[h] − Σₕ (exp_IT[h]·(price_IT[h]+GO) + exp_BG[h]·(price_BG[h]+GO)) · (1 − tax/100)"
           notes={[
             "CRF(r, n) = r(1+r)ⁿ / ((1+r)ⁿ − 1).",
             "Tech cost trajectory: low 0.75× / central 1.0× / high 1.25× applied to capex AND opex.",
             "Discount rate slider drives r.",
+            "Italy long-run premium ≈ €15/MWh over GR; Bulgaria ≈ €5/MWh.",
           ]}
         />
         <ModuleRow
@@ -168,6 +169,9 @@ function MethodsView() {
         <ProfileRow name="Day-ahead price (IT)"
                     form="p_IT[h] = p_GR[h] + 15 + AR₁(0.7, 8)"
                     target="long-run GR ↔ IT spread ≈ €15/MWh" />
+        <ProfileRow name="Day-ahead price (BG)"
+                    form="p_BG[h] = p_GR[h] + 5 + AR₁(0.7, 6)"
+                    target="long-run GR ↔ BG spread ≈ €5/MWh" />
       </MethodBlock>
 
       <MethodBlock title="Hardcoded anchors — Western Macedonia"

@@ -164,6 +164,19 @@
     return out;
   }
 
+  // ----- Bulgaria price (€/MWh) — Greek price + €5 + smaller stochastic ----
+  // Bulgaria IBEX typically tracks Greek HENEX closely; €5/MWh long-run premium
+  // over GR is conservative. Noise is independent of Italy.
+  function bulgariaPriceProfile(greekPrice) {
+    const out = new Float32Array(HOURS);
+    const noise = ar1(HOURS, 0.7, 6, 6006);
+    for (let h = 0; h < HOURS; h++) {
+      out[h] = greekPrice[h] + 5 + noise[h];
+      if (out[h] < 10) out[h] = 10;
+    }
+    return out;
+  }
+
   // Utilities
   function rescaleToMean(arr, target) {
     let s = 0;
@@ -190,6 +203,7 @@
     const heat = heatDemandProfile(temp);
     const priceGr = priceProfile(elec, solar, wind);
     const priceIt = italyPriceProfile(priceGr);
+    const priceBg = bulgariaPriceProfile(priceGr);
     return {
       hours: HOURS,
       solar_cf: solar,
@@ -199,6 +213,7 @@
       heat_demand_mwth: heat,
       price_gr_eur_mwh: priceGr,
       price_it_eur_mwh: priceIt,
+      price_bg_eur_mwh: priceBg,
       meta: {
         solar_cf_annual: avg(solar),
         wind_cf_annual: avg(wind),
@@ -207,6 +222,7 @@
         heat_gwh_yr: sum(heat) / 1e3,
         price_gr_mean: avg(priceGr),
         price_it_mean: avg(priceIt),
+        price_bg_mean: avg(priceBg),
       },
     };
   }

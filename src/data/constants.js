@@ -48,6 +48,7 @@
     bulgaria_mw: 600,
     north_macedonia_mw: 400,
     italy_premium_eur_mwh: 15,
+    bulgaria_premium_eur_mwh: 5,
   };
 
   // Fuel + carbon

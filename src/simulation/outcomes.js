@@ -94,37 +94,58 @@
 
   // -------------------------------------------------------------------------
   // 4. Imports / exports / curtailment
+  //    Exports allocate hourly across destinations in DESCENDING-PRICE order:
+  //    Italy first (higher long-run premium), Bulgaria second. Total export
+  //    cap is the sum of destination caps, scaled by IPTO reinforcement and
+  //    interconnection delay.
   // -------------------------------------------------------------------------
-  function balance(genArr, demArr, storFlow, importCapMw, exportCapMw) {
+  function balance(genArr, demArr, storFlow, importCapMw, exportDests) {
     const N = genArr.length;
-    const imp = new Float32Array(N); // MWh per hour
-    const exp = new Float32Array(N);
+    const imp = new Float32Array(N);
+    const exp = new Float32Array(N);                              // total export per hour
+    const expByDest = exportDests.map(() => new Float32Array(N)); // per-destination
     const curt = new Float32Array(N);
     let demandTot = 0, genTot = 0, impTot = 0, expTot = 0, curtTot = 0;
+    const dPrices = exportDests.map((d) => d.prices);
+    const dCaps   = exportDests.map((d) => d.cap_mw);
+    const D = exportDests.length;
+    // Reusable indices buffer for destination sort
+    const idx = new Int8Array(D);
     for (let h = 0; h < N; h++) {
       const net = genArr[h] + storFlow[h] - demArr[h];
       demandTot += demArr[h];
       genTot += genArr[h];
       if (net < 0) {
-        // deficit
-        const needed = -net;
-        const got = Math.min(needed, importCapMw);
-        imp[h] = got;
-        impTot += got;
-        // anything past cap is unserved — ignored in MVP (or future LoLE metric)
+        const got = Math.min(-net, importCapMw);
+        imp[h] = got; impTot += got;
       } else if (net > 0) {
-        // surplus
-        const exportable = Math.min(net, exportCapMw);
-        exp[h] = exportable;
-        expTot += exportable;
-        const curtVal = net - exportable;
-        curt[h] = curtVal;
-        curtTot += curtVal;
+        // Sort destinations by price descending at this hour.
+        for (let i = 0; i < D; i++) idx[i] = i;
+        for (let i = 1; i < D; i++) {
+          let j = i;
+          while (j > 0 && dPrices[idx[j - 1]][h] < dPrices[idx[j]][h]) {
+            const t = idx[j - 1]; idx[j - 1] = idx[j]; idx[j] = t; j--;
+          }
+        }
+        let remaining = net;
+        for (let i = 0; i < D; i++) {
+          const di = idx[i];
+          const send = Math.min(remaining, dCaps[di]);
+          if (send > 0) {
+            expByDest[di][h] = send;
+            exp[h] += send;
+            remaining -= send;
+          }
+        }
+        expTot += exp[h];
+        const c = remaining;
+        if (c > 0) { curt[h] = c; curtTot += c; }
       }
     }
     return {
       hourly_import_mw: imp,
       hourly_export_mw: exp,
+      hourly_export_by_dest_mw: expByDest,
       hourly_curtail_mw: curt,
       demand_mwh: demandTot,
       generation_mwh: genTot,
@@ -164,10 +185,18 @@
 
     let importCost = 0, exportRev = 0;
     const goPrem = state.go_premium_eur_mwh || 0;
+    const tax = (state.export_tax_pct || 0) / 100;
+    const expIt = bal.hourly_export_by_dest_mw ? bal.hourly_export_by_dest_mw[0] : null;
+    const expBg = bal.hourly_export_by_dest_mw ? bal.hourly_export_by_dest_mw[1] : null;
     for (let h = 0; h < bal.hourly_import_mw.length; h++) {
       importCost += bal.hourly_import_mw[h] * profiles.price_gr_eur_mwh[h];
-      exportRev  += bal.hourly_export_mw[h] * (profiles.price_it_eur_mwh[h] + goPrem)
-                                            * (1 - (state.export_tax_pct || 0) / 100);
+      if (expIt && expBg) {
+        exportRev += expIt[h] * (profiles.price_it_eur_mwh[h] + goPrem) * (1 - tax);
+        exportRev += expBg[h] * (profiles.price_bg_eur_mwh[h] + goPrem) * (1 - tax);
+      } else {
+        // backward-compat — should not occur after this refactor
+        exportRev  += bal.hourly_export_mw[h] * (profiles.price_it_eur_mwh[h] + goPrem) * (1 - tax);
+      }
     }
     const taxRevenue = 0; // computed below
 
@@ -185,14 +214,22 @@
   }
 
   // -------------------------------------------------------------------------
-  // 6. State export-tax revenue (separate from PPC system cost)
+  // 6. State export-tax revenue — sums over BOTH destinations.
   // -------------------------------------------------------------------------
   function exportTaxRevenue(state, bal, profiles) {
-    let r = 0;
     const tax = (state.export_tax_pct || 0) / 100;
     if (tax <= 0) return 0;
+    let r = 0;
+    const expIt = bal.hourly_export_by_dest_mw ? bal.hourly_export_by_dest_mw[0] : null;
+    const expBg = bal.hourly_export_by_dest_mw ? bal.hourly_export_by_dest_mw[1] : null;
+    const goPrem = state.go_premium_eur_mwh || 0;
     for (let h = 0; h < bal.hourly_export_mw.length; h++) {
-      r += bal.hourly_export_mw[h] * profiles.price_it_eur_mwh[h] * tax;
+      if (expIt && expBg) {
+        r += expIt[h] * (profiles.price_it_eur_mwh[h] + goPrem) * tax;
+        r += expBg[h] * (profiles.price_bg_eur_mwh[h] + goPrem) * tax;
+      } else {
+        r += bal.hourly_export_mw[h] * (profiles.price_it_eur_mwh[h] + goPrem) * tax;
+      }
     }
     return r;
   }
@@ -288,14 +325,21 @@
     const importCap = C.INTERCONNECTIONS.grita_italy_mw
                     + C.INTERCONNECTIONS.bulgaria_mw
                     + C.INTERCONNECTIONS.north_macedonia_mw;
-    const exportCap = C.INTERCONNECTIONS.grita_italy_mw;
     // IPTO reinforcement adds linear capacity per €25M, cap +500 MW.
     const reinforcementBonus = Math.min(500, (state.ipto_reinforcement_meur || 0) * 2);
     // Interconnection delay scales caps down for the projection horizon.
     const delayMult = Math.max(0.3, 1 - (state.interconnection_delay_yr || 0) / 10);
+    // Reinforcement bonus splits between the two export destinations
+    // proportionally to their nameplate capacity (Italy 500 / Bulgaria 600 → 5/11 and 6/11).
+    const totalNameplate = C.INTERCONNECTIONS.grita_italy_mw + C.INTERCONNECTIONS.bulgaria_mw;
+    const reinfIt = reinforcementBonus * (C.INTERCONNECTIONS.grita_italy_mw / totalNameplate);
+    const reinfBg = reinforcementBonus * (C.INTERCONNECTIONS.bulgaria_mw    / totalNameplate);
     const effImportCap = (importCap + reinforcementBonus) * delayMult;
-    const effExportCap = (exportCap + reinforcementBonus) * delayMult;
-    const bal = balance(gen.hourly_mw, dem.hourly_mw, stor.flow_mw, effImportCap, effExportCap);
+    const exportDests = [
+      { name: "italy",    cap_mw: (C.INTERCONNECTIONS.grita_italy_mw + reinfIt) * delayMult, prices: profiles.price_it_eur_mwh },
+      { name: "bulgaria", cap_mw: (C.INTERCONNECTIONS.bulgaria_mw    + reinfBg) * delayMult, prices: profiles.price_bg_eur_mwh },
+    ];
+    const bal = balance(gen.hourly_mw, dem.hourly_mw, stor.flow_mw, effImportCap, exportDests);
 
     const econ = economics(state, gen, bal, profiles);
     // Fuel cost adjusted by gas multiplier
@@ -310,15 +354,30 @@
     const taxRev = exportTaxRevenue(state, bal, profiles);
 
     const selfSuff = 1 - bal.imports_mwh / Math.max(1, bal.demand_mwh);
+    // Per-destination annual export totals (TWh)
+    let exp_italy_twh = 0, exp_bulgaria_twh = 0;
+    if (bal.hourly_export_by_dest_mw) {
+      const it = bal.hourly_export_by_dest_mw[0];
+      const bg = bal.hourly_export_by_dest_mw[1];
+      for (let h = 0; h < it.length; h++) {
+        exp_italy_twh    += it[h];
+        exp_bulgaria_twh += bg[h];
+      }
+      exp_italy_twh    /= 1e6;
+      exp_bulgaria_twh /= 1e6;
+    }
     return {
       profiles_meta: profiles.meta,
       capacities: gen.capacities,
+      export_caps: { italy_mw: exportDests[0].cap_mw, bulgaria_mw: exportDests[1].cap_mw },
       hourly: {
         gen: gen.hourly_mw,
         dem: dem.hourly_mw,
         stor: stor.flow_mw,
         imp: bal.hourly_import_mw,
         exp: bal.hourly_export_mw,
+        exp_italy: bal.hourly_export_by_dest_mw ? bal.hourly_export_by_dest_mw[0] : null,
+        exp_bulgaria: bal.hourly_export_by_dest_mw ? bal.hourly_export_by_dest_mw[1] : null,
         curt: bal.hourly_curtail_mw,
         soc: stor.soc,
       },
@@ -327,6 +386,8 @@
         dem_twh: bal.demand_mwh / 1e6,
         imp_twh: bal.imports_mwh / 1e6,
         exp_twh: bal.exports_mwh / 1e6,
+        exp_italy_twh,
+        exp_bulgaria_twh,
         curt_twh: bal.curtailment_mwh / 1e6,
       },
       economics: econ,
