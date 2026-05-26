@@ -466,3 +466,154 @@ button { font-family: inherit; }
 }
 .notice strong { font-size: 11.5px; }
 .notice.warn { background: var(--warn-bg); border-color: #F0D8A8; color: var(--warn); }
+
+/* ============================================================
+   Mobile (phone) — stack the three panes vertically, allow page scroll.
+   Desktop styles above remain untouched at ≥769px.
+   ============================================================ */
+@media (max-width: 768px) {
+  html, body, #root { height: auto; min-height: 100%; }
+  body { font-size: 13px; -webkit-text-size-adjust: 100%; }
+
+  /* Allow the whole page to scroll instead of trapping inside .app */
+  .app {
+    grid-template-rows: auto 1fr;
+    height: auto; min-height: 100vh;
+    overflow: visible;
+  }
+
+  /* Top bar wraps onto two rows: brand+controls top, sections bottom (scrollable) */
+  .topbar {
+    height: auto; min-height: 48px;
+    padding: 6px 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .topbar .brand {
+    font-size: 12.5px; padding-right: 8px;
+  }
+  .topbar .brand .sub { display: none; }
+  .topbar .grow { display: none; }
+  .topbar .sections {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .topbar .sections::-webkit-scrollbar { display: none; }
+  .topbar .sections button {
+    padding: 6px 12px; font-size: 13px;
+  }
+  .topbar .controls {
+    margin-left: auto;
+    gap: 6px; flex-wrap: wrap;
+  }
+  .topbar .controls .btn,
+  .topbar .controls .select {
+    height: 30px; font-size: 12px; padding: 0 8px;
+  }
+
+  /* Stack three panes vertically. Controls and KPI follow viz, all in page scroll. */
+  .main {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+  .pane.controls,
+  .pane.kpi {
+    border-left: 0; border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow: visible;
+    max-height: none;
+  }
+  .pane.viz {
+    overflow: visible;
+    min-height: 70vh;
+    border-bottom: 1px solid var(--line);
+  }
+  .viz-body {
+    min-height: 60vh;
+  }
+
+  /* Viz tabs scroll horizontally on small screens */
+  .viz-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 8px;
+    scrollbar-width: none;
+  }
+  .viz-tabs::-webkit-scrollbar { display: none; }
+  .viz-tabs button {
+    padding: 8px 10px; font-size: 12.5px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .viz-tabs > span:last-child { display: none; }
+
+  /* Bigger touch targets on sliders */
+  .slider-row { padding: 12px 0; }
+  .slider-row .range-wrap { height: 28px; }
+  .slider-row input[type="range"] { height: 28px; }
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    width: 22px; height: 22px; margin-top: -9px;
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .slider-row input[type="range"]::-moz-range-thumb {
+    width: 20px; height: 20px;
+  }
+  .slider-row input[type="range"]::-webkit-slider-runnable-track { height: 4px; }
+  .slider-row .label-line { font-size: 13px; }
+  .slider-row .label-line .value { font-size: 12.5px; }
+  .slider-row .lock { width: 22px; height: 22px; }
+
+  .group-header { padding: 12px 14px; font-size: 11px; }
+  .group-body { padding: 4px 14px 10px 14px; }
+
+  .select-row .seg button { padding: 8px 12px; font-size: 12.5px; }
+
+  /* KPI panel — keep 2-col grid, slightly more breathing room */
+  .kpi-card { padding: 10px 12px; }
+  .kpi-card .value { font-size: 20px; }
+
+  /* Map — legend wraps and shrinks */
+  .map-legend {
+    right: 8px; top: 8px;
+    padding: 6px 8px; font-size: 10.5px;
+    min-width: 0; max-width: 60%;
+  }
+
+  /* Landing pages — collapse 5-col stage grid */
+  .landing { padding: 20px 16px; max-width: 100%; }
+  .landing h1 { font-size: 19px; }
+  .landing .stage-grid { grid-template-columns: 1fr 1fr; }
+  .landing .actor-table { overflow-x: auto; }
+  .landing .actor-table table { min-width: 480px; }
+
+  /* Dispatch / sankey / pareto containers */
+  .dispatch-container { padding: 8px; }
+  .sankey-wrap { padding: 8px; }
+  .dispatch-controls { flex-wrap: wrap; gap: 8px; }
+
+  /* Modal scales to viewport */
+  .modal {
+    margin: 12px; max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    padding: 16px 18px;
+  }
+
+  /* Game cards stack */
+  .game-grid { padding: 8px; gap: 8px; }
+  .game-card { padding: 12px; }
+  .payoff-table { font-size: 11.5px; }
+
+  .notice { margin: 8px 12px; font-size: 11.5px; }
+}
+
+/* Very narrow phones */
+@media (max-width: 380px) {
+  .topbar .brand { font-size: 12px; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .landing .stage-grid { grid-template-columns: 1fr; }
+}
