@@ -178,7 +178,7 @@ function TopBar({ section, setSection, onPreset, animatingPreset, compareBaselin
     <div className="topbar">
       <div className="brand">
         <span className="dot" />
-        <span>Kozani <span className="sub">/ ESI for Resilience</span></span>
+        <span>GridWise <span className="sub">/ Kozani · ESI for Resilience</span></span>
       </div>
       <div className="sections">
         {[
